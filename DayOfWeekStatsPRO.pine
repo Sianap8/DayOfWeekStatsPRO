@@ -1,0 +1,103 @@
+//@version=6
+indicator("📊 Day of Week Stats PRO", overlay=false, max_lines_count=500, max_labels_count=500)
+
+// === Settings ===
+pipSize = input.float(0.0001, "Pip Size for ADR", step=0.00001)
+
+// === Initialization ===
+var float[] gainCounts = array.new_float(7, 0)
+var float[] lossCounts = array.new_float(7, 0)
+var float[] gainSums = array.new_float(7, 0)
+var float[] lossSums = array.new_float(7, 0)
+var float[] totalSums = array.new_float(7, 0)
+var float[] totalCounts = array.new_float(7, 0)
+var float[] volumeSums = array.new_float(7, 0)
+var float[] adrSums = array.new_float(7, 0)
+var string[] dayLabels = array.from("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
+// === Daily Metrics ===
+dayIndex = dayofweek - 1  // 0 (Sun) to 6 (Sat)
+chg = (close - open) / open * 100
+adr = (high - low) / pipSize
+
+// === Update stats arrays ===
+if barstate.isconfirmed and not na(chg)
+    array.set(totalSums, dayIndex, array.get(totalSums, dayIndex) + chg)
+    array.set(totalCounts, dayIndex, array.get(totalCounts, dayIndex) + 1)
+    array.set(volumeSums, dayIndex, array.get(volumeSums, dayIndex) + volume)
+    array.set(adrSums, dayIndex, array.get(adrSums, dayIndex) + adr)
+
+    if chg > 0
+        array.set(gainCounts, dayIndex, array.get(gainCounts, dayIndex) + 1)
+        array.set(gainSums, dayIndex, array.get(gainSums, dayIndex) + chg)
+    else
+        array.set(lossCounts, dayIndex, array.get(lossCounts, dayIndex) + 1)
+        array.set(lossSums, dayIndex, array.get(lossSums, dayIndex) + chg)
+
+// === Table ===
+var table statsTable = table.new(position.top_right, 9, 9, frame_color=color.gray, frame_width=1)
+
+// === Heatmap Helper ===
+f_color(val) =>
+    color result = na
+    if val >= 2
+        result := color.rgb(0, 120, 0, 90)
+    else if val >= 1
+        result := color.rgb(0, 180, 0, 80)
+    else if val >= 0
+        result := color.rgb(60, 60, 60, 50)
+    else if val <= -2
+        result := color.rgb(200, 0, 0, 90)
+    else if val <= -1
+        result := color.rgb(150, 0, 0, 80)
+    else
+        result := color.rgb(90, 0, 0, 50)
+    result
+
+// === Display Table ===
+if barstate.islast
+    table.cell(statsTable, 0, 0, "Day", text_color=color.white, bgcolor=color.gray)
+    table.cell(statsTable, 1, 0, "% Gain", text_color=color.green)
+    table.cell(statsTable, 2, 0, "Avg Gain", text_color=color.green)
+    table.cell(statsTable, 3, 0, "% Loss", text_color=color.red)
+    table.cell(statsTable, 4, 0, "Avg Loss", text_color=color.red)
+    table.cell(statsTable, 5, 0, "Net Avg", text_color=color.yellow)
+    table.cell(statsTable, 6, 0, "Total Avg", text_color=color.white)
+    table.cell(statsTable, 7, 0, "Volume", text_color=color.orange)
+    table.cell(statsTable, 8, 0, "ADR (pips)", text_color=color.aqua)
+
+    for i = 0 to 6
+        gains = array.get(gainCounts, i)
+        losses = array.get(lossCounts, i)
+        gainSum = array.get(gainSums, i)
+        lossSum = array.get(lossSums, i)
+        totalSum = array.get(totalSums, i)
+        totalBars = array.get(totalCounts, i)
+        volumeSum = array.get(volumeSums, i)
+        adrSum = array.get(adrSums, i)
+        total = gains + losses
+
+        pctGain = total > 0 ? gains / total * 100 : na
+        avgGain = gains > 0 ? gainSum / gains : na
+        pctLoss = total > 0 ? losses / total * 100 : na
+        avgLoss = losses > 0 ? lossSum / losses : na
+        netAvg = total > 0 ? (gains * avgGain + losses * avgLoss) / total : na
+        totalAvg = totalBars > 0 ? totalSum / totalBars : na
+        avgVol = totalBars > 0 ? volumeSum / totalBars : na
+        avgADR = totalBars > 0 ? adrSum / totalBars : na
+
+        table.cell(statsTable, 0, i + 1, array.get(dayLabels, i), text_color=color.white)
+        table.cell(statsTable, 1, i + 1, str.tostring(pctGain, "#.##") + "%")
+        table.cell(statsTable, 2, i + 1, str.tostring(avgGain, "#.##") + "%", bgcolor=f_color(avgGain))
+        table.cell(statsTable, 3, i + 1, str.tostring(pctLoss, "#.##") + "%")
+        table.cell(statsTable, 4, i + 1, str.tostring(avgLoss, "#.##") + "%", bgcolor=f_color(avgLoss))
+        table.cell(statsTable, 5, i + 1, str.tostring(netAvg, "#.##") + "%", bgcolor=f_color(netAvg))
+        table.cell(statsTable, 6, i + 1, str.tostring(totalAvg, "#.##") + "%", bgcolor=f_color(totalAvg))
+        table.cell(statsTable, 7, i + 1, str.tostring(avgVol, "#.##"))
+        table.cell(statsTable, 8, i + 1, str.tostring(avgADR, "#.##"))
+
+// === Live Session Performance ===
+currPerf = chg
+sessionColor = currPerf > 0 ? color.green : color.red
+table.cell(statsTable, 0, 8, "Live Session:", text_color=color.white, bgcolor=color.rgb(40,40,40))
+table.cell(statsTable, 1, 8, str.tostring(currPerf, "#.##") + "%", text_color=color.white, bgcolor=sessionColor)
